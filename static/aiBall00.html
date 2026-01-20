@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soul星球效果 - Vue2 + Three.js</title>
+    <!-- 引入Vue2 -->
+    <script src="vue.min.js"></script>
+    <!-- 引入Three.js -->
+    <script src="three.js"></script>
+    <!-- 引入OrbitControls（用于鼠标控制） -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.129.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- 引入FontLoader（用于加载字体） -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.129.0/examples/js/loaders/FontLoader.js"></script>
+    <!-- 引入TextGeometry（用于3D文字） -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.129.0/examples/js/geometries/TextGeometry.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #0c0c1d 0%, #1a1a3a 100%);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            padding: 20px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 8px;
+            background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .header p {
+            color: #aaa;
+            font-size: 14px;
+        }
+        
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .planet-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #planetCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 10;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+        
+        .info-panel {
+            width: 350px;
+            background: rgba(10, 10, 30, 0.8);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .selected-user {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .avatar {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            margin: 0 auto 15px;
+            border: 3px solid #6a11cb;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(106, 17, 203, 0.5);
+        }
+        
+        .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .username {
+            font-size: 22px;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+        
+        .tag {
+            display: inline-block;
+            background: rgba(106, 17, 203, 0.2);
+            color: #a78bfa;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+        
+        .info-section {
+            margin-top: 20px;
+        }
+        
+        .info-section h3 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #6a11cb;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 5px;
+        }
+        
+        .info-section p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #ccc;
+            margin-bottom: 15px;
+        }
+        
+        .hint {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 250px;
+            z-index: 10;
+        }
+        
+        .footer {
+            padding: 15px;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+            background: rgba(0, 0, 0, 0.3);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .user-counter {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #6a11cb;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 10;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #fff;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="header">
+            <h1>Soul星球 - 3D社交宇宙</h1>
+            <p>点击星球上的用户头像查看详细信息，使用鼠标拖拽旋转/缩放星球</p>
+        </div>
+        
+        <div class="container">
+            <div class="planet-container">
+                <div class="user-counter">当前在线: {{ users.length }}</div>
+                <div class="hint">提示: 拖动鼠标旋转星球，滚动鼠标缩放，点击头像查看用户信息</div>
+                <canvas id="planetCanvas"></canvas>
+                
+                <div class="controls">
+                    <button class="btn" @click="resetView">重置视角</button>
+                    <button class="btn" @click="toggleAutoRotate">{{ autoRotate ? '停止旋转' : '自动旋转' }}</button>
+                    <button class="btn" @click="addRandomUser">添加用户</button>
+                </div>
+                
+                <div class="loading" v-if="loading">加载中...</div>
+            </div>
+            
+            <div class="info-panel" v-if="selectedUser">
+                <div class="selected-user">
+                    <div class="avatar">
+                        <img :src="selectedUser.avatar" :alt="selectedUser.name">
+                    </div>
+                    <h2 class="username">{{ selectedUser.name }}</h2>
+                    <div class="tag">{{ selectedUser.tag }}</div>
+                </div>
+                
+                <div class="info-section">
+                    <h3>个性签名</h3>
+                    <p>{{ selectedUser.bio }}</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>兴趣标签</h3>
+                    <p>
+                        <span v-for="interest in selectedUser.interests" :key="interest" class="tag" style="margin-right: 8px; margin-bottom: 8px;">
+                            {{ interest }}
+                        </span>
+                    </p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>星球信息</h3>
+                    <p>位置: 纬度 {{ selectedUser.lat.toFixed(2) }}, 经度 {{ selectedUser.lon.toFixed(2) }}</p>
+                    <p>加入时间: {{ selectedUser.joinDate }}</p>
+                    <p>在线状态: <span :style="{color: selectedUser.online ? '#4ade80' : '#f87171'}">{{ selectedUser.online ? '在线' : '离线' }}</span></p>
+                </div>
+            </div>
+            <div class="info-panel" v-else>
+                <div style="text-align: center; margin-top: 50%; transform: translateY(-50%);">
+                    <h3 style="color: #6a11cb; margin-bottom: 15px;">点击星球上的用户</h3>
+                    <p style="color: #aaa; line-height: 1.6;">点击3D星球上的任意用户头像，可以在这里查看他们的详细信息、个性签名和兴趣标签。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            Vue2 + Three.js 实现类似Soul App的星球效果 | 用户数据仅为演示，非真实用户信息
+        </div>
+    </div>
+
+    <script>
+        // 创建Vue实例
+        new Vue({
+            el: '#app',
+            data: {
+                scene: null,
+                camera: null,
+                renderer: null,
+                controls: null,
+                raycaster: null,
+                mouse: null,
+                selectedUser: null,
+                loading: true,
+                autoRotate: true,
+                users: [
+                    {
+                        id: 1,
+                        name: '星空漫游者',
+                        avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
+                        tag: '旅行爱好者',
+                        bio: '在星辰大海中寻找生命的意义，喜欢探索未知的世界。',
+                        interests: ['旅行', '摄影', '天文', '冒险'],
+                        lat: 0,
+                        lon: 0,
+                        joinDate: '2023-01-15',
+                        online: true
+                    },
+                    {
+                        id: 2,
+                        name: '音乐精灵',
+                        avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
+                        tag: '音乐达人',
+                        bio: '用音符编织梦想，用旋律温暖心灵。',
+                        interests: ['音乐', '钢琴', '创作', '演唱会'],
+                        lat: 30,
+                        lon: 60,
+                        joinDate: '2022-11-03',
+                        online: true
+                    },
+                    {
+                        id: 3,
+                        name: '书香门第',
+                        avatar: 'https://randomuser.me/api/portraits/men/67.jpg',
+                        tag: '文学爱好者',
+                        bio: '书卷多情似故人，晨昏忧乐每相亲。',
+                        interests: ['阅读', '写作', '历史', '哲学'],
+                        lat: -20,
+                        lon: 120,
+                        joinDate: '2023-03-22',
+                        online: false
+                    },
+                    {
+                        id: 4,
+                        name: '科技先锋',
+                        avatar: 'https://randomuser.me/api/portraits/men/22.jpg',
+                        tag: '科技极客',
+                        bio: '探索科技边界，用代码改变世界。',
+                        interests: ['编程', 'AI', '机器人', '创新'],
+                        lat: 40,
+                        lon: -30,
+                        joinDate: '2022-09-10',
+                        online: true
+                    },
+                    {
+                        id: 5,
+                        name: '运动健将',
+                        avatar: 'https://randomuser.me/api/portraits/women/33.jpg',
+                        tag: '健身教练',
+                        bio: '生命在于运动，健康在于坚持。',
+                        interests: ['健身', '瑜伽', '跑步', '营养'],
+                        lat: -30,
+                        lon: -60,
+                        joinDate: '2023-02-18',
+                        online: true
+                    },
+                    {
+                        id: 6,
+                        name: '美食探索家',
+                        avatar: 'https://randomuser.me/api/portraits/men/55.jpg',
+                        tag: '美食博主',
+                        bio: '世间万物，唯美食与爱不可辜负。',
+                        interests: ['烹饪', '美食', '烘焙', '探店'],
+                        lat: 10,
+                        lon: 150,
+                        joinDate: '2022-12-05',
+                        online: true
+                    },
+                    {
+                        id: 7,
+                        name: '艺术灵魂',
+                        avatar: 'https://randomuser.me/api/portraits/women/28.jpg',
+                        tag: '画家',
+                        bio: '用色彩描绘世界，用画笔诉说情感。',
+                        interests: ['绘画', '艺术', '设计', '展览'],
+                        lat: -40,
+                        lon: 90,
+                        joinDate: '2023-04-30',
+                        online: false
+                    },
+                    {
+                        id: 8,
+                        name: '自然守护者',
+                        avatar: 'https://randomuser.me/api/portraits/women/50.jpg',
+                        tag: '环保志愿者',
+                        bio: '保护地球家园，是我们每个人的责任。',
+                        interests: ['环保', '徒步', '动物保护', '园艺'],
+                        lat: 50,
+                        lon: -120,
+                        joinDate: '2022-08-12',
+                        online: true
+                    }
+                ],
+                userObjects: [], // 存储Three.js用户对象
+                centralPlanet: null // 中央星球对象
+            },
+            mounted() {
+                // 初始化Three.js场景
+                this.initThree();
+                
+                // 创建中央星球
+                this.createCentralPlanet();
+                
+                // 创建用户节点
+                this.createUserNodes();
+                
+                // 开始动画循环
+                this.animate();
+                
+                // 添加点击事件监听
+                window.addEventListener('click', this.onCanvasClick);
+                
+                // 加载完成后隐藏加载提示
+                setTimeout(() => {
+                    this.loading = false;
+                }, 1500);
+            },
+            beforeDestroy() {
+                // 清理事件监听
+                window.removeEventListener('click', this.onCanvasClick);
+            },
+            methods: {
+                initThree() {
+                    // 获取canvas容器
+                    const container = document.getElementById('planetCanvas');
+                    
+                    // 1. 创建场景
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(0x0c0c1d);
+                    
+                    // 2. 创建相机
+                    const width = container.clientWidth;
+                    const height = container.clientHeight;
+                    this.camera = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+                    this.camera.position.z = 8;
+                    
+                    // 3. 创建渲染器
+                    this.renderer = new THREE.WebGLRenderer({ 
+                        canvas: container,
+                        antialias: true,
+                        alpha: true
+                    });
+                    this.renderer.setSize(width, height);
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    
+                    // 4. 添加轨道控制器
+                    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+                    this.controls.enableDamping = true;
+                    this.controls.dampingFactor = 0.05;
+                    this.controls.autoRotate = this.autoRotate;
+                    this.controls.autoRotateSpeed = 0.5;
+                    
+                    // 5. 初始化光线投射和鼠标向量
+                    this.raycaster = new THREE.Raycaster();
+                    this.mouse = new THREE.Vector2();
+                    
+                    // 6. 添加光源
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                    this.scene.add(ambientLight);
+                    
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(5, 3, 5);
+                    this.scene.add(directionalLight);
+                    
+                    // 7. 添加星星背景
+                    this.createStarfield();
+                    
+                    // 8. 窗口大小调整监听
+                    window.addEventListener('resize', this.onWindowResize);
+                },
+                
+                createCentralPlanet() {
+                    // 创建中央星球几何体
+                    const geometry = new THREE.SphereGeometry(2, 64, 64);
+                    
+                    // 创建材质 - 使用渐变色
+                    const material = new THREE.MeshPhongMaterial({
+                        color: 0x1a1a3a,
+                        shininess: 30,
+                        transparent: true,
+                        opacity: 0.9
+                    });
+                    
+                    // 创建星球网格
+                    this.centralPlanet = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.centralPlanet);
+                    
+                    // 添加云层效果
+                    const cloudGeometry = new THREE.SphereGeometry(2.05, 64, 64);
+                    const cloudMaterial = new THREE.MeshPhongMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.1
+                    });
+                    const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                    this.centralPlanet.add(clouds);
+                },
+                
+                createUserNodes() {
+                    const textureLoader = new THREE.TextureLoader();
+                    this.userObjects = [];
+                    
+                    this.users.forEach((user, index) => {
+                        // 1. 创建用户头像几何体（使用圆形平面）
+                        const geometry = new THREE.CircleGeometry(0.15, 32);
+                        
+                        // 2. 创建头像材质
+                        const material = new THREE.MeshBasicMaterial({
+                            map: textureLoader.load(user.avatar)
+                        });
+                        
+                        // 3. 创建用户头像网格
+                        const userMesh = new THREE.Mesh(geometry, material);
+                        userMesh.userData = user; // 将用户数据绑定到3D对象
+                        
+                        // 4. 计算3D空间位置（球面坐标转换）
+                        const radius = 3.5; // 环绕半径
+                        const phi = (90 - user.lat) * (Math.PI / 180);
+                        const theta = (user.lon + 180) * (Math.PI / 180);
+                        
+                        userMesh.position.set(
+                            - (radius * Math.sin(phi) * Math.cos(theta)),
+                            radius * Math.cos(phi),
+                            radius * Math.sin(phi) * Math.sin(theta)
+                        );
+                        
+                        // 5. 使头像始终面向相机
+                        userMesh.lookAt(new THREE.Vector3(0, 0, 0));
+                        
+                        // 6. 添加发光效果
+                        const glowGeometry = new THREE.RingGeometry(0.16, 0.2, 32);
+                        const glowMaterial = new THREE.MeshBasicMaterial({
+                            color: user.online ? 0x4ade80 : 0xf87171,
+                            transparent: true,
+                            opacity: 0.7,
+                            side: THREE.DoubleSide
+                        });
+                        const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+                        glow.rotation.x = Math.PI / 2;
+                        userMesh.add(glow);
+                        
+                        // 7. 添加到场景和数组
+                        this.scene.add(userMesh);
+                        this.userObjects.push(userMesh);
+                        
+                        // 8. 添加连线到中心
+                        if (index % 2 === 0) {
+                            this.createConnectionLine(userMesh.position, new THREE.Vector3(0, 0, 0), user.online ? 0x4ade80 : 0xf87171);
+                        }
+                    });
+                },
+                
+                createConnectionLine(start, end, color) {
+                    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                    const material = new THREE.LineBasicMaterial({
+                        color: color,
+                        transparent: true,
+                        opacity: 0.3,
+                        linewidth: 1
+                    });
+                    const line = new THREE.Line(geometry, material);
+                    this.scene.add(line);
+                },
+                
+                createStarfield() {
+                    // 创建星星背景
+                    const starGeometry = new THREE.BufferGeometry();
+                    const starCount = 5000;
+                    const positions = new Float32Array(starCount * 3);
+                    
+                    for (let i = 0; i < starCount * 3; i += 3) {
+                        positions[i] = (Math.random() - 0.5) * 1000;
+                        positions[i+1] = (Math.random() - 0.5) * 1000;
+                        positions[i+2] = (Math.random() - 0.5) * 1000;
+                    }
+                    
+                    starGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    
+                    const starMaterial = new THREE.PointsMaterial({
+                        color: 0xffffff,
+                        size: 0.7,
+                        transparent: true
+                    });
+                    
+                    const stars = new THREE.Points(starGeometry, starMaterial);
+                    this.scene.add(stars);
+                },
+                
+                onCanvasClick(event) {
+                    const canvas = document.getElementById('planetCanvas');
+                    const rect = canvas.getBoundingClientRect();
+                    
+                    // 计算归一化的鼠标坐标
+                    this.mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    this.mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                    
+                    // 更新光线投射
+                    this.raycaster.setFromCamera(this.mouse, this.camera);
+                    
+                    // 检测与用户对象的交点
+                    const intersects = this.raycaster.intersectObjects(this.userObjects);
+                    
+                    if (intersects.length > 0) {
+                        // 找到第一个被点击的用户对象
+                        const clickedObject = intersects[0].object;
+                        if (clickedObject.userData) {
+                            this.selectedUser = clickedObject.userData;
+                            console.log('选中用户:', this.selectedUser.name);
+                            
+                            // 添加一个选中效果
+                            this.highlightSelectedUser(clickedObject);
+                        }
+                    }
+                },
+                
+                highlightSelectedUser(userMesh) {
+                    // 移除之前的高亮效果
+                    this.userObjects.forEach(obj => {
+                        if (obj.children.length > 1) {
+                            // 移除第二个子元素（高亮环）
+                            const highlightRing = obj.children[1];
+                            if (highlightRing && highlightRing.type === 'Mesh' && highlightRing.geometry.type === 'RingGeometry') {
+                                highlightRing.material.color.setHex(obj.userData.online ? 0x4ade80 : 0xf87171);
+                            }
+                        }
+                    });
+                    
+                    // 为选中的用户添加高亮效果
+                    if (userMesh.children.length > 1) {
+                        const highlightRing = userMesh.children[1];
+                        if (highlightRing && highlightRing.type === 'Mesh' && highlightRing.geometry.type === 'RingGeometry') {
+                            highlightRing.material.color.setHex(0x6a11cb);
+                            highlightRing.material.opacity = 1;
+                        }
+                    }
+                },
+                
+                resetView() {
+                    // 重置相机位置
+                    this.camera.position.set(0, 0, 8);
+                    this.controls.reset();
+                },
+                
+                toggleAutoRotate() {
+                    this.autoRotate = !this.autoRotate;
+                    this.controls.autoRotate = this.autoRotate;
+                },
+                
+                addRandomUser() {
+                    // 创建随机用户
+                    const randomId = Math.max(...this.users.map(u => u.id)) + 1;
+                    const genders = ['men', 'women'];
+                    const gender = genders[Math.floor(Math.random() * genders.length)];
+                    const randomNum = Math.floor(Math.random() * 99) + 1;
+                    
+                    const newUser = {
+                        id: randomId,
+                        name: '新用户' + randomId,
+                        avatar: `https://randomuser.me/api/portraits/${gender}/${randomNum}.jpg`,
+                        tag: '探索者',
+                        bio: '刚刚加入星球的新成员，正在探索这个奇妙的世界。',
+                        interests: ['探索', '社交', '学习', '分享'],
+                        lat: (Math.random() - 0.5) * 90,
+                        lon: (Math.random() - 0.5) * 360,
+                        joinDate: new Date().toISOString().split('T')[0],
+                        online: Math.random() > 0.3
+                    };
+                    
+                    // 添加到用户数组
+                    this.users.push(newUser);
+                    
+                    // 创建对应的3D对象
+                    const textureLoader = new THREE.TextureLoader();
+                    const geometry = new THREE.CircleGeometry(0.15, 32);
+                    const material = new THREE.MeshBasicMaterial({
+                        map: textureLoader.load(newUser.avatar)
+                    });
+                    const userMesh = new THREE.Mesh(geometry, material);
+                    userMesh.userData = newUser;
+                    
+                    // 计算位置
+                    const radius = 3.5;
+                    const phi = (90 - newUser.lat) * (Math.PI / 180);
+                    const theta = (newUser.lon + 180) * (Math.PI / 180);
+                    
+                    userMesh.position.set(
+                        - (radius * Math.sin(phi) * Math.cos(theta)),
+                        radius * Math.cos(phi),
+                        radius * Math.sin(phi) * Math.sin(theta)
+                    );
+                    
+                    userMesh.lookAt(new THREE.Vector3(0, 0, 0));
+                    
+                    // 添加发光效果
+                    const glowGeometry = new THREE.RingGeometry(0.16, 0.2, 32);
+                    const glowMaterial = new THREE.MeshBasicMaterial({
+                        color: newUser.online ? 0x4ade80 : 0xf87171,
+                        transparent: true,
+                        opacity: 0.7,
+                        side: THREE.DoubleSide
+                    });
+                    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+                    glow.rotation.x = Math.PI / 2;
+                    userMesh.add(glow);
+                    
+                    // 添加到场景
+                    this.scene.add(userMesh);
+                    this.userObjects.push(userMesh);
+                },
+                
+                onWindowResize() {
+                    const canvas = document.getElementById('planetCanvas');
+                    const width = canvas.clientWidth;
+                    const height = canvas.clientHeight;
+                    
+                    this.camera.aspect = width / height;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(width, height);
+                },
+                
+                animate() {
+                    requestAnimationFrame(this.animate);
+                    
+                    // 更新中央星球旋转
+                    if (this.centralPlanet) {
+                        this.centralPlanet.rotation.y += 0.001;
+                    }
+                    
+                    // 更新用户头像轻微浮动
+                    this.userObjects.forEach((obj, index) => {
+                        const time = Date.now() * 0.001;
+                        const floatAmount = 0.05;
+                        const originalY = obj.position.y;
+                        obj.position.y = originalY + Math.sin(time + index) * floatAmount;
+                    });
+                    
+                    // 更新控制器
+                    this.controls.update();
+                    
+                    // 渲染场景
+                    this.renderer.render(this.scene, this.camera);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

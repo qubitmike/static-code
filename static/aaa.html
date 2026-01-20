@@ -1,0 +1,80 @@
+<html>
+<head>
+<script>
+
+var ListNode ={
+val:0,
+next:null,
+ListNode:function (val, next) {
+    this.val = (val===undefined ? 0 : val)
+    this.next = (next===undefined ? null : next)
+}
+}
+
+var addTwoNumbers = function(l1, l2) {
+    let head = null, tail = null;
+    let carry = 0;
+    while (l1 || l2) {
+        const n1 = l1 ? l1.val : 0;
+        const n2 = l2 ? l2.val : 0;
+        const sum = n1 + n2 + carry;
+        if (!head) {
+            head = tail = new ListNode(sum % 10);
+        } else {
+            tail.next = new ListNode(sum % 10);
+            tail = tail.next;
+        }
+        carry = Math.floor(sum / 10);
+        if (l1) {
+            l1 = l1.next;
+        }
+        if (l2) {
+            l2 = l2.next;
+        }
+    }
+    if (carry > 0) {
+        tail.next = new ListNode(carry);
+    }
+    return head;
+};
+
+
+var addTwoNumbers = function (l1, l2) {
+    let l3 = new ListNode(0);
+	let temp = null;
+	let isNeedAdd = false;
+	temp = l3;
+    while (l1 || l2) {
+        const n1 = l1 ? l1.val : 0;
+        const n2 = l2 ? l2.val : 0;
+        temp.val = n1 + n2 + (isNeedAdd ?1 :0);
+
+		if (temp.val >= 10) {
+			isNeedAdd = true;
+			temp.val -= 10;
+		}
+		
+		if(l1){
+			l1= l1.next;
+		}
+		if(l2){
+			l2 = l2.next;
+		}
+		if(l1 || l2){
+			temp.next = new ListNode(0);
+			temp = temp.next;
+		}
+    }
+	if (isNeedAdd) {
+		temp.next = new ListNode(0);
+		temp.val = 1;
+	}
+	return l3;
+};
+
+var a = addTwoNumbers(ListNode(0,0) ,ListNode(1,2));
+console.log(a);
+
+</script>
+</head>
+</html>
