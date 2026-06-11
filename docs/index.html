@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>JS + JSON 动态执行器</title>
+	<!-- 从 CDN 引入 Ace 编辑器
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.min.js"></script>
+	<script>
+        // 非常重要：设置 Ace 的基础路径，确保 worker-javascript.js 能正确加载
+        ace.config.set("basePath", "https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/");
+
+        // 初始化编辑器
+        const editor = ace.edit("editor", {
+            theme: "ace/theme/monokai",        // 主题，可选 monokai, github, twilight 等
+            mode: "ace/mode/javascript",       // 语言模式
+            fontSize: "14px",
+            showPrintMargin: false,
+            enableBasicAutocompletion: true,   // 基础自动补全
+            enableLiveAutocompletion: true,    // 实时自动补全
+            enableSnippets: true               // 代码片段
+        });
+
+        // 开启实时语法检查（基于 Worker + JSHint）
+        editor.session.setOption("useWorker", true);
+
+        // 一些额外的编辑器设置
+        editor.setOptions({
+            tabSize: 2,
+            useSoftTabs: true
+        });
+    </script>
+	 -->
+	<!-- 使用 CDN 加载 Monaco Editor
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <script>
+        // 配置 Monaco 的 CDN 基础路径，确保能正确加载语言服务 worker
+        require.config({
+            paths: {
+                vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs'
+            }
+        });
+
+        // 加载编辑器主模块
+        require(['vs/editor/editor.main'], function () {
+            // 创建编辑器实例
+            const editor = monaco.editor.create(document.getElementById('editor'), {
+                value: [
+                    '// 👋 欢迎！在这里编写你的 JavaScript 代码',
+                    '// 语法高亮与实时错误检查已自动开启',
+                    '',
+                    'function greet(name) {',
+                    '    console.log("Hello, " + name);',
+                    '}',
+                    '',
+                    '// 试试故意写错，比如漏掉括号：',
+                    'greet("World");'
+                ].join('\n'),
+                language: 'javascript',   // 设置为 JavaScript 语言
+                theme: 'vs-dark',         // 主题：vs (亮色), vs-dark (暗色), hc-black (高对比度)
+                automaticLayout: true,    // 自适应容器大小变化
+                minimap: { enabled: true }, // 是否显示代码缩略图
+                fontSize: 14,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                tabSize: 2
+            });
+
+            // 显式开启 JavaScript 的语法与语义诊断（默认就是开启的）
+            monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+                noSemanticValidation: false, // 不要关闭语义验证
+                noSyntaxValidation: false    // 不要关闭语法验证
+            });
+
+            // 你还可以在这里添加更多配置，比如自动补全、保存事件等
+            // editor.onDidChangeModelContent(() => {
+            //     console.log('代码内容发生了变化');
+            // });
+        });
+    </script>
+	 -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            height: 100vh;
+            width: 100vw;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Roboto', 'Monaco', 'Menlo', monospace;
+            background: #1e1f2c;
+            color: #eef4ff;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .three-columns {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            min-height: 0;
+            padding: 20px 20px 20px 20px;
+            gap: 20px;
+        }
+
+        .col-card {
+            flex: 1;
+            background: #2d2f3e;
+            border-radius: 24px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid #3d4050;
+        }
+
+        .card-header {
+            padding: 14px 18px;
+            background: #252734;
+            font-weight: 600;
+            font-size: 1rem;
+            border-bottom: 1px solid #3d4050;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .card-header span:first-child {
+            color: #ffd966;
+            font-size: 0.95rem;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .small-btn {
+            background: #363a4f;
+            border: none;
+            border-radius: 30px;
+            padding: 4px 14px;
+            color: #ddd;
+            font-size: 0.7rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.1s;
+            font-family: monospace;
+        }
+        .small-btn:hover {
+            background: #5a5f82;
+            color: white;
+        }
+        .card-content {
+            flex: 1;
+            padding: 16px;
+            overflow: auto;
+        }
+        textarea {
+            width: 100%;
+            height: 100%;
+            background: #1a1b26;
+            border: 1px solid #3e405b;
+            border-radius: 16px;
+            color: #e2e8ff;
+            font-family: 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            resize: none;
+            padding: 12px;
+            outline: none;
+        }
+        textarea:focus {
+            border-color: #7c6bc3;
+            box-shadow: 0 0 0 2px rgba(124,107,195,0.3);
+        }
+
+        .col-card.third-col {
+            display: flex;
+            flex-direction: column;
+        }
+        .exec-controls {
+            display: flex;
+            flex-direction: row;
+            gap: 16px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+        .ctrl-group {
+            flex: 1;
+            min-width: 120px;
+        }
+        .ctrl-group label {
+            display: block;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+            color: #b7c0e0;
+        }
+        select {
+            width: 100%;
+            background: #1a1b26;
+            border: 1px solid #3e405b;
+            border-radius: 30px;
+            padding: 10px 14px;
+            color: #eef4ff;
+            font-family: monospace;
+            font-size: 0.85rem;
+            cursor: pointer;
+            outline: none;
+        }
+        .exec-button {
+            background: #5f4bb6;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            color: white;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        .exec-button:hover {
+            background: #7b64d4;
+            transform: translateY(-1px);
+        }
+        .info-tip {
+            font-size: 11px;
+            color: #96a0c0;
+            border-top: 1px solid #3a3c4e;
+            padding-top: 10px;
+            margin-top: 8px;
+            flex-shrink: 0;
+        }
+        .inline-result {
+            background: #161722;
+            border-radius: 18px;
+            margin-top: 16px;
+            padding: 12px 16px;
+            border-left: 4px solid #5f4bb6;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 120px;
+        }
+        .inline-result .result-title {
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 0.75rem;
+            color: #a9b3e0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .inline-result .result-content {
+            color: #cbd5ff;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-y: auto;
+        }
+        .error-marker {
+            color: #ff9e8f;
+            background: rgba(244, 114, 114, 0.15);
+            padding: 6px 12px;
+            border-radius: 12px;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #232433; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb { background: #5a5c7a; border-radius: 10px; }
+		#editor {
+            width: 100%;
+            max-width: 900px;
+            height: 100%;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="three-columns">
+    <div class="col-card">
+        <div class="card-header">
+            <span>📜 第一部分 · JavaScript 脚本</span>
+            <div class="action-buttons">
+                <button class="small-btn" id="formatJsBtn">✨ 格式化</button>
+                <button class="small-btn" id="refreshFunctionsBtn">🔄 刷新函数</button>
+            </div>
+        </div>
+        <div class="card-content">
+			<!-- <div id="editor"></div> -->
+            <textarea id="jsScriptArea" placeholder='// 支持 function 声明、const/let 箭头函数
+function greet(data) {
+    if(data?.name) return `Hello ${data.name}`;
+    return "Hello world";
+}
+const double = (n) => n * 2;
+function sumArray(arr) {
+    return arr.reduce((a,b)=>a+b,0);
+}
+const getMeta = (obj) => obj?.meta || "无meta数据";'></textarea>
+        </div>
+    </div>
+
+    <div class="col-card">
+        <div class="card-header">
+            <span>📦 第二部分 · JSON 对象</span>
+            <div class="action-buttons">
+                <button class="small-btn" id="formatJsonBtn">🧹 格式化</button>
+                <button class="small-btn" id="refreshJsonKeysBtn">🔄 刷新字段</button>
+            </div>
+        </div>
+        <div class="card-content">
+            <textarea id="jsonInputArea" placeholder='{
+  "name": "Alice",
+  "age": 28,
+  "numbers": [10,20,30],
+  "meta": { "version": "1.0" }
+}'></textarea>
+        </div>
+    </div>
+
+    <div class="col-card third-col">
+        <div class="card-header">
+            <span>⚙️ 第三部分 · 执行配置</span>
+            <span style="background:#3a3c4e; padding:2px 10px; border-radius:30px; font-size:0.7rem;">结果内嵌下方</span>
+        </div>
+        <div class="card-content" style="display: flex; flex-direction: column; overflow: hidden;">
+            <div class="exec-controls">
+                <div class="ctrl-group">
+                    <label>🎯 选择 JS 方法</label>
+                    <select id="methodSelect">
+                        <option value="">-- 请先编写/刷新 --</option>
+                    </select>
+                </div>
+                <div class="ctrl-group">
+                    <label>🗂️ 选择 JSON 字段</label>
+                    <select id="jsonKeySelect">
+                        <option value="__whole__">📌 整个 JSON 对象</option>
+                        <option value="">-- 等待解析 --</option>
+                    </select>
+                </div>
+                <button id="executeBtn" class="exec-button">▶ 执行脚本</button>
+            </div>
+            <div class="info-tip">
+                💡 说明：支持 function 声明和 const/let 箭头函数。选中字段值作为参数传入。
+            </div>
+            <div class="inline-result" id="inlineResultArea">
+                <div class="result-title">
+                    📋 执行结果
+                    <span style="font-size: 10px;">(点击执行按钮)</span>
+                </div>
+                <div class="result-content" id="resultContent">等待执行...</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // DOM 元素
+    const jsScriptArea = document.getElementById('jsScriptArea');
+    const jsonInputArea = document.getElementById('jsonInputArea');
+    const methodSelect = document.getElementById('methodSelect');
+    const jsonKeySelect = document.getElementById('jsonKeySelect');
+    const executeBtn = document.getElementById('executeBtn');
+    const refreshFunctionsBtn = document.getElementById('refreshFunctionsBtn');
+    const refreshJsonKeysBtn = document.getElementById('refreshJsonKeysBtn');
+    const formatJsBtn = document.getElementById('formatJsBtn');
+    const formatJsonBtn = document.getElementById('formatJsonBtn');
+    const resultContentDiv = document.getElementById('resultContent');
+
+    let currentFunctionNames = [];
+    let currentJsonData = null;
+    let currentJsonKeys = [];
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            return m === '&' ? '&amp;' : (m === '<' ? '&lt;' : '&gt;');
+        });
+    }
+
+    function displayResult(data, isError = false) {
+        if (isError) {
+            resultContentDiv.innerHTML = `<div class="error-marker">❌ 错误: ${escapeHtml(String(data))}</div>`;
+        } else {
+            let formatted;
+            try {
+                if (data === undefined) formatted = '<span style="color:#ffb86b;">undefined</span>';
+                else if (data === null) formatted = '<span style="color:#ffb86b;">null</span>';
+                else if (typeof data === 'object')
+                    formatted = `<pre style="margin:0; background:#0f0f17; padding:8px; border-radius:12px;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+                else formatted = escapeHtml(String(data));
+            } catch(e) { formatted = escapeHtml(String(data)); }
+            resultContentDiv.innerHTML = `<div>✨ 返回值: <span style="color:#b9f2b0;">→</span><br>${formatted}</div>`;
+        }
+    }
+    function showError(msg) { displayResult(msg, true); }
+
+    // 提取函数名（正则）
+    function extractFunctionNames(script) {
+        const functionNames = new Set();
+        const funcDeclRegex = /function\s+([a-zA-Z_$][0-9a-zA-Z_$]*)\s*\(/g;
+        let match;
+        while ((match = funcDeclRegex.exec(script)) !== null) functionNames.add(match[1]);
+        const varAssignRegex = /(?:const|let|var)\s+([a-zA-Z_$][0-9a-zA-Z_$]*)\s*=\s*(?:\([^)]*\)|[a-zA-Z_$][a-zA-Z0-9_$]*)\s*=>|(?:const|let|var)\s+([a-zA-Z_$][0-9a-zA-Z_$]*)\s*=\s*function\s*\(/g;
+        let match2;
+        while ((match2 = varAssignRegex.exec(script)) !== null) {
+            const name = match2[1] || match2[2];
+            if (name) functionNames.add(name);
+        }
+        const reserved = ['if','for','while','switch','return','function','class','typeof','instanceof'];
+        return [...functionNames].filter(n => n && !reserved.includes(n));
+    }
+
+// ========== 替换 refreshFunctionList ==========
+function refreshFunctionList() {
+    const script = jsScriptArea.value;
+    if (!script.trim()) {
+        methodSelect.innerHTML = '<option value="">-- 无脚本内容 --</option>';
+        currentFunctionNames = [];
+        return;
+    }
+
+    // 1. 原有的顶级函数提取（function 声明、const/let 箭头函数）
+    const topLevelFunctions = extractFunctionNames(script);
+
+    // 2. 执行脚本并提取对象方法（支持嵌套）
+    let objectMethods = [];
+    try {
+        // 用间接 eval 在全局作用域执行脚本（var 声明的对象会成为 window 属性）
+        (0, eval)(script);
+
+        // 从脚本中提取 var 声明的变量名（即可能的顶层对象名）
+        const varNames = [];
+        const varRegex = /(?:var|let|const)\s+(\w+)/g;
+        let m;
+        while ((m = varRegex.exec(script)) !== null) {
+            varNames.push(m[1]);
+        }
+
+        // 遍历这些变量，如果是对象则递归提取方法路径
+        for (const varName of varNames) {
+            const obj = window[varName];
+            if (obj && typeof obj === 'object') {
+                objectMethods.push(...getMethodNames(obj, varName));
+            }
+        }
+    } catch (e) {
+        // 忽略执行错误（例如脚本未引用外部 Tool，如果初始为空则不操作）
+    }
+
+    // 3. 合并去重
+    const allNames = [...new Set([...topLevelFunctions, ...objectMethods])];
+
+    if (allNames.length === 0) {
+        methodSelect.innerHTML = '<option value="">-- 未检测到函数 --</option>';
+    } else {
+        let options = '<option value="">-- 请选择方法 --</option>';
+        allNames.forEach(name => options += `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`);
+        methodSelect.innerHTML = options;
+        currentFunctionNames = allNames;
+    }
+}
+
+// ========== 新增：递归获取对象方法名路径 ==========
+function getMethodNames(obj, path) {
+    const methods = [];
+    if (!obj || typeof obj !== 'object') return methods;
+
+    for (const key of Object.keys(obj)) {
+        const fullPath = path + '.' + key;
+        if (typeof obj[key] === 'function') {
+            methods.push(fullPath);   // 叶节点：可调用的方法
+        } else if (typeof obj[key] === 'object' && obj[key] !== null && !Array.isArray(obj[key])) {
+            // 递归提取嵌套对象的方法（限制深度为 3，避免无限循环）
+            if (path.split('.').length < 4) {
+                methods.push(...getMethodNames(obj[key], fullPath));
+            }
+        }
+    }
+    return methods;
+}
+
+    function refreshJsonFieldList() {
+        const jsonStr = jsonInputArea.value.trim();
+        if (!jsonStr) {
+            jsonKeySelect.innerHTML = '<option value="__whole__">📌 整个 JSON 对象</option><option value="">-- 无数据 --</option>';
+            currentJsonData = null;
+            currentJsonKeys = [];
+            return;
+        }
+        try {
+            const parsed = JSON.parse(jsonStr);
+            currentJsonData = parsed;
+            const keys = Object.keys(parsed);
+            currentJsonKeys = keys;
+            let options = '<option value="__whole__">📌 整个 JSON 对象</option>';
+            if (keys.length === 0) options += '<option value="">-- 无顶层字段 --</option>';
+            else {
+                keys.forEach(key => {
+                    let preview = '';
+                    const val = parsed[key];
+                    if (val === null) preview = ' (null)';
+                    else if (typeof val === 'object') preview = Array.isArray(val) ? ` (Array[${val.length}])` : ` {Object}`;
+                    else if (typeof val === 'string') preview = ` "${val.length > 15 ? val.slice(0,12)+'...' : val}"`;
+                    else preview = ` (${typeof val})`;
+                    options += `<option value="${escapeHtml(key)}">${escapeHtml(key)}${escapeHtml(preview)}</option>`;
+                });
+            }
+            jsonKeySelect.innerHTML = options;
+        } catch (e) {
+            jsonKeySelect.innerHTML = '<option value="__whole__">📌 整个 JSON 对象</option><option value="">-- JSON 解析错误 --</option>';
+            currentJsonData = null;
+            showError(`JSON 语法错误: ${e.message}`);
+        }
+    }
+
+    // 简易 JS 格式化
+    function formatJavaScript(code) {
+        try {
+            let formatted = code.replace(/\s*\n\s*/g, '\n').replace(/\{\s*\n/g, '{\n').replace(/\;\s*\n/g, ';\n')
+                .replace(/\;\s*(\})/g, ';$1').replace(/\}\s*else/g, '} else').replace(/\}\s*catch/g, '} catch')
+                .replace(/\}\s*finally/g, '} finally').replace(/\}\s*\n/g, '}\n');
+            let lines = formatted.split('\n');
+            let indentLevel = 0, resultLines = [];
+            for (let line of lines) {
+                let trimmed = line.trim();
+                if (trimmed === '') continue;
+                if (trimmed.startsWith('}') || trimmed.startsWith(']') || trimmed.startsWith(')')) indentLevel = Math.max(0, indentLevel-1);
+                resultLines.push('  '.repeat(indentLevel) + trimmed);
+                if (trimmed.endsWith('{') || trimmed.endsWith('[') || (trimmed.endsWith('(') && !trimmed.includes(');'))) indentLevel++;
+                if (trimmed.includes('=> {') && !trimmed.includes('}')) indentLevel++;
+                if (indentLevel > 12) indentLevel = 12;
+            }
+            return resultLines.join('\n');
+        } catch(e) { return code; }
+    }
+    function formatJSON(jsonStr) {
+        try { return JSON.stringify(JSON.parse(jsonStr), null, 2); } catch(e) { alert(`JSON 解析错误: ${e.message}`); return jsonStr; }
+    }
+
+    // ========== 核心执行逻辑 (完美支持 const/let/var/function) ==========
+function executeScript() {
+    resultContentDiv.innerHTML = '<span style="color:#bbb;">⏳ 执行中...</span>';
+    const script = jsScriptArea.value;
+    if (!script.trim()) { showError("请编写 JavaScript 脚本"); return; }
+    const selectedMethod = methodSelect.value;
+    if (!selectedMethod) { showError("请选择一个 JS 方法"); return; }
+
+    // 1. 解析 JSON，获取参数值
+    let argumentValue = undefined;
+    try {
+        const jsonRaw = jsonInputArea.value.trim();
+        if (jsonRaw) {
+            const jsonData = JSON.parse(jsonRaw);
+            const selectedKey = jsonKeySelect.value;
+            if (selectedKey === "__whole__") {
+                argumentValue = jsonData;
+            } else if (selectedKey) {
+                argumentValue = jsonData?.hasOwnProperty(selectedKey) ? jsonData[selectedKey] : undefined;
+            }
+        }
+    } catch (e) {
+        showError(`JSON 解析失败: ${e.message}`);
+        return;
+    }
+
+    // 2. 提取根对象名（例如 "ADDJ.checkAll" → "ADDJ"）
+    const rootObjName = selectedMethod.includes('.') ? selectedMethod.split('.')[0] : selectedMethod;
+
+    // 3. 构造函数体：先执行脚本，再尝试调用根对象的 init()，最后调用目标方法
+    const functionBody = `
+        ${script};
+        // 如果根对象有 init 方法，自动执行（初始化内部 ProductSDK 等引用）
+        if (typeof ${rootObjName} !== 'undefined' && typeof ${rootObjName}.init === 'function') {
+            ${rootObjName}.init();
+        }
+        return ${selectedMethod}(arg);
+    `;
+
+    try {
+        const executor = new Function('arg', functionBody);
+        const result = executor(argumentValue);
+
+        if (result && typeof result.then === 'function') {
+            result.then(v => displayResult(v, false))
+                  .catch(err => displayResult(`Promise 拒绝: ${err.message || err}`, true));
+            displayResult("⏳ 函数返回 Promise，等待完成...", false);
+        } else {
+            displayResult(result, false);
+        }
+    } catch (err) {
+        console.error(err);
+        showError(`执行失败: ${err.message}\n请检查脚本语法或函数是否存在。`);
+    }
+}
+
+    // 初始化示例
+    function initExample() {
+        jsScriptArea.value = `// 示例：支持 function 和 const 箭头函数
+function greetUser(data) {
+    if (data?.name) return \`👋 Hello, \${data.name}! Age: \${data.age || '?'}\`;
+    return "请传入包含 name 字段的对象";
+}
+function calcTotal(numbers) {
+    if (Array.isArray(numbers)) return numbers.reduce((s,n)=>s+n,0);
+    return "需要数组参数";
+}
+const getMeta = (obj) => obj?.meta || "无meta数据";`;
+        jsonInputArea.value = `{
+  "name": "张三",
+  "age": 30,
+  "numbers": [10, 20, 30, 40],
+  "meta": { "version": "2.1", "author": "测试" }
+}`;
+        refreshFunctionList();
+        refreshJsonFieldList();
+    }
+
+    // 事件绑定
+    refreshFunctionsBtn.addEventListener('click', () => {
+        refreshFunctionList();
+        resultContentDiv.innerHTML = `<span style="color:#b9f2b0;">✅ 刷新函数列表，检测到 ${currentFunctionNames.length} 个函数。</span>`;
+        setTimeout(() => { if (resultContentDiv.innerHTML.includes('刷新函数列表')) resultContentDiv.innerHTML = '等待执行...'; }, 1800);
+    });
+    refreshJsonKeysBtn.addEventListener('click', () => {
+        refreshJsonFieldList();
+        if (currentJsonData) resultContentDiv.innerHTML = `<span style="color:#b9f2b0;">✅ JSON 字段刷新，共 ${currentJsonKeys.length} 个字段。</span>`;
+        else resultContentDiv.innerHTML = `<span style="color:#ffb86b;">⚠️ JSON 无效</span>`;
+        setTimeout(() => { if (resultContentDiv.innerHTML.includes('JSON 字段刷新')) resultContentDiv.innerHTML = '等待执行...'; }, 1800);
+    });
+    executeBtn.addEventListener('click', executeScript);
+    formatJsBtn.addEventListener('click', () => {
+        jsScriptArea.value = formatJavaScript(jsScriptArea.value);
+        refreshFunctionList();
+        jsScriptArea.focus();
+    });
+    formatJsonBtn.addEventListener('click', () => {
+        jsonInputArea.value = formatJSON(jsonInputArea.value);
+        refreshJsonFieldList();
+        jsonInputArea.focus();
+    });
+    jsScriptArea.addEventListener('blur', refreshFunctionList);
+    jsonInputArea.addEventListener('blur', refreshJsonFieldList);
+
+    initExample();
+</script>
+</body>
+</html>
